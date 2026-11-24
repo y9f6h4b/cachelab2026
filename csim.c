@@ -45,7 +45,7 @@ typedef enum
 {
   HIT,
   MISS,
-  MISS_EVICTION
+  MISS_AND_EVICT
 } AccessResult;
 
 static int parse_number(const char *text, size_t *number)
@@ -61,13 +61,13 @@ static int parse_number(const char *text, size_t *number)
   return 1;
 }
 
-static AccessResult access_set(CacheLine *set, size_t ways, uint64_t tag, uint64_t timestamp)
+static AccessResult access_set(CacheLine *set, size_t ways, uint64_t need_tag, uint64_t timestamp)
 {
   CacheLine *victim = set;
   for (size_t way = 0; way < ways; ++way)
   {
     CacheLine *line = &set[way];
-    if (line->last_used && line->tag == tag)
+    if (line->last_used && line->tag == need_tag)
     {
       line->last_used = timestamp;
       return HIT;
@@ -76,8 +76,8 @@ static AccessResult access_set(CacheLine *set, size_t ways, uint64_t tag, uint64
       victim = line;
   }
 
-  AccessResult result = victim->last_used ? MISS_EVICTION : MISS;
-  *victim = (CacheLine){tag, timestamp};
+  AccessResult result = victim->last_used ? MISS_AND_EVICT : MISS;
+  *victim = (CacheLine){need_tag, timestamp};
   return result;
 }
 
@@ -98,12 +98,12 @@ int main(int argc, char *argv[])
       case 'E': parameter = &ways; break;
       case 'b': parameter = &block_bits; break;
       case 't': trace_path = optarg; continue;
-      default: return EXIT_FAILURE;
+      default: goto ultima;
     }
     if (!parse_number(optarg, parameter))
     {
       fprintf(stderr, "Invalid value for -%c: %s\n", option, optarg);
-      return EXIT_FAILURE;
+      goto ultima;
     }
   }
 
@@ -111,30 +111,33 @@ int main(int argc, char *argv[])
       !ways || !trace_path || optind != argc || set_bits >= sizeof(size_t) * CHAR_BIT)
   {
     fprintf(stderr, "Invalid or missing cache configuration; use -h for help.\n");
-    return EXIT_FAILURE;
+    goto ultima;
   }
 
   size_t set_count = (size_t)1 << set_bits;
   if (ways > SIZE_MAX / sizeof(CacheLine) / set_count)
   {
     fprintf(stderr, "Cache configuration is too large.\n");
-    return EXIT_FAILURE;
+    goto ultima;
   }
 
   FILE *trace = fopen(trace_path, "r");
   if (!trace)
   {
     perror(trace_path);
-    return EXIT_FAILURE;
+    goto ultima;
   }
+
+  //!!! File on !!!
 
   CacheLine *cache = calloc(set_count * ways, sizeof(*cache));
   if (!cache)
   {
     perror("Cache allocation");
-    fclose(trace);
-    return EXIT_FAILURE;
+    goto file_ultima;
   }
+
+  //!!! mem allocated !!!
 
   int hits = 0, misses = 0, evictions = 0;
   uint64_t timestamp = 0;
@@ -153,7 +156,7 @@ int main(int argc, char *argv[])
     AccessResult result = access_set(&cache[set_index * ways], ways, block >> set_bits, ++timestamp);
     hits += result == HIT;
     misses += result != HIT;
-    evictions += result == MISS_EVICTION;
+    evictions += result == MISS_AND_EVICT;
     if (verbose)
       printf("%c %" PRIx64 ",%d %s\n", operation, address, size,
              result == HIT ? "hit" : result == MISS ? "miss" : "miss eviction");
@@ -165,8 +168,13 @@ int main(int argc, char *argv[])
   if (read_failed)
   {
     fprintf(stderr, "Failed to read trace: %s\n", trace_path);
-    return EXIT_FAILURE;
+    goto ultima;
   }
   printSummary(hits, misses, evictions);
   return EXIT_SUCCESS;
+
+  file_ultima:
+  fclose(trace);
+  ultima:
+  return EXIT_FAILURE;
 }
