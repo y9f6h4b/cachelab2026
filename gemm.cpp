@@ -45,9 +45,9 @@ void gemm_case0(ptr_reg A, ptr_reg B, ptr_reg C, [[maybe_unused]] ptr_reg buffer
 
 #define CASE1_TILE_ROWS 6
 #define CASE1_TILE_COLS 4
-#define CASE1_ROW_TILES ((case1_m + CASE1_TILE_ROWS - 1) / CASE1_TILE_ROWS)
+#define CASE1_ROW_TILES ((case1_m + CASE1_TILE_ROWS - 1) / CASE1_TILE_ROWS) //floor((a+b-1)/b) is equiv to ceil(a/b)
 #define CASE1_COL_TILES (case1_p / CASE1_TILE_COLS)
-#define CASE1_ROW_START (tile / CASE1_COL_TILES * CASE1_TILE_ROWS)
+#define CASE1_ROW_START (tile / CASE1_COL_TILES * CASE1_TILE_ROWS) //verbatim substitution
 #define CASE1_COL_START (tile % CASE1_COL_TILES * CASE1_TILE_COLS)
 
 void gemm_case1(ptr_reg A, ptr_reg B, ptr_reg C, [[maybe_unused]] ptr_reg buffer)

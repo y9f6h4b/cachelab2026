@@ -17,3 +17,4 @@ __pycache__
 /workspaces
 *.dSYM
 printTrace
+.DS_STORE
